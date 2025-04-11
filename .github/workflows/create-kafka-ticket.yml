@@ -22,6 +22,12 @@ on:
         description: 'Nombre de partitions'
         required: true
 
+
+permissions:
+  contents: read
+  issues: write
+
+  
 jobs:
   create-issue:
     runs-on: self-hosted

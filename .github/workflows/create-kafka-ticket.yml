@@ -28,7 +28,7 @@ jobs:
 
     steps:
     - name: Créer une issue Kafka
-      uses: peter-evans/create-issue@v5
+      uses: peter-evans/create-issue@v4
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         title: "Création topic Kafka pour ${{ inputs.client }}"

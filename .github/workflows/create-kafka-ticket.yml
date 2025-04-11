@@ -25,21 +25,23 @@ on:
 jobs:
   create-issue:
     runs-on: self-hosted
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - name: Générer le contenu de l'issue
+      run: |
+        echo "#KafkaTopicRequest" > issue-body.md
+        echo "client: ${{ inputs.client }}" >> issue-body.md
+        echo "environnement: ${{ inputs.environnement }}" >> issue-body.md
+        echo "event: ${{ inputs.event }}" >> issue-body.md
+        echo "version: ${{ inputs.version }}" >> issue-body.md
+        echo "retention: ${{ inputs.retention }}" >> issue-body.md
+        echo "partitions: ${{ inputs.partitions }}" >> issue-body.md
+
     - name: Créer une issue Kafka
-      uses: peter-evans/create-issue@v4
+      uses: peter-evans/create-issue-from-file@v5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         title: "Création topic Kafka pour ${{ inputs.client }}"
-        body: |
-          #KafkaTopicRequest
-          client: ${{ inputs.client }}
-          environnement: ${{ inputs.environnement }}
-          event: ${{ inputs.event }}
-          version: ${{ inputs.version }}
-          retention: ${{ inputs.retention }}
-          partitions: ${{ inputs.partitions }}
-        labels: kafka, auto-generated
+        content-filepath: issue-body.md
+        labels: |
+          kafka
+          auto-generated

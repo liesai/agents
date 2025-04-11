@@ -1,0 +1,43 @@
+name: Kafka Topic Request
+
+on:
+  workflow_dispatch:
+    inputs:
+      client:
+        description: 'Nom du client'
+        required: true
+      environnement:
+        description: 'Environnement (dev/staging/production)'
+        required: true
+      event:
+        description: 'Type d’événement (ex: transaction, paiement, etc.)'
+        required: true
+      version:
+        description: 'Version du topic (ex: v1)'
+        required: true
+      retention:
+        description: 'Durée de rétention (ex: 7d, 30d)'
+        required: true
+      partitions:
+        description: 'Nombre de partitions'
+        required: true
+
+jobs:
+  create-issue:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Créer une issue Kafka
+      uses: peter-evans/create-issue@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        title: "Création topic Kafka pour ${{ inputs.client }}"
+        body: |
+          #KafkaTopicRequest
+          client: ${{ inputs.client }}
+          environnement: ${{ inputs.environnement }}
+          event: ${{ inputs.event }}
+          version: ${{ inputs.version }}
+          retention: ${{ inputs.retention }}
+          partitions: ${{ inputs.partitions }}
+        labels: kafka, auto-generated

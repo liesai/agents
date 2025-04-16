@@ -1,64 +1,72 @@
-import hmac
-import hashlib
 import os
-import re
-from flask import Flask, request, jsonify, abort
+import requests
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
-# 🔄 Charge les variables d'environnement depuis le fichier .env
 load_dotenv()
 
 app = Flask(__name__)
 
-GITHUB_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET")
+CONFLUENT_API_KEY = os.getenv("CONFLUENT_API_KEY")
+CONFLUENT_API_SECRET = os.getenv("CONFLUENT_API_SECRET")
+CLUSTER_ID = os.getenv("CONFLUENT_CLUSTER_ID")
 
-def is_valid_signature(payload_body, signature_header):
-    if not signature_header:
-        return False
+def create_topic(topic_name, partitions, retention_ms):
+    url = f"https://api.confluent.cloud/kafka/v3/clusters/{CLUSTER_ID}/topics"
+    auth = (CONFLUENT_API_KEY, CONFLUENT_API_SECRET)
 
-    sha_name, signature = signature_header.split('=')
-    if sha_name != 'sha256':
-        return False
+    payload = {
+        "topic_name": topic_name,
+        "partitions_count": partitions,
+        "configs": [
+            {
+                "name": "retention.ms",
+                "value": str(retention_ms)
+            }
+        ]
+    }
 
-    mac = hmac.new(GITHUB_SECRET.encode(), msg=payload_body, digestmod=hashlib.sha256)
-    expected_signature = mac.hexdigest()
-    return hmac.compare_digest(expected_signature, signature)
-
-def parse_issue_payload(payload):
-    issue = payload.get("issue", {})
-    body = issue.get("body", "")
-    if "#KafkaTopicRequest" not in body:
-        return None
-
-    pattern = r"(client|environnement|event|version|retention|partitions):\s*(\S+)"
-    matches = re.findall(pattern, body)
-    data = {k: v for k, v in matches}
-    data["ticketId"] = issue.get("number")
-    data["repository"] = payload.get("repository", {}).get("full_name")
-    return data if "client" in data else None
-
-def dispatch_to_provisioner(task_data):
-    print(f"[DISPATCH] Provision task: {task_data}")
+    response = requests.post(url, json=payload, auth=auth)
+    return response
 
 @app.route("/webhook", methods=["POST"])
-def github_webhook():
-    signature = request.headers.get('X-Hub-Signature-256')
-    raw_data = request.data
+def webhook():
+    data = request.json
+    issue = data.get("issue", {})
+    body = issue.get("body", "")
+    labels = [label["name"] for label in issue.get("labels", [])]
 
-    if not is_valid_signature(raw_data, signature):
-        print("[SECURITY] Signature invalide !")
-        abort(403)
+    if "kafka" not in labels:
+        return jsonify({"message": "No kafka label found"}), 200
 
-    payload = request.get_json()
-    if payload.get("action") not in ["opened", "edited"]:
-        return jsonify({"message": "Action ignorée"}), 200
+    def extract(field):
+        for line in body.splitlines():
+            if line.lower().startswith(f"{field.lower()}:"):
+                return line.split(":", 1)[1].strip()
+        return None
 
-    parsed = parse_issue_payload(payload)
-    if parsed:
-        dispatch_to_provisioner(parsed)
-        return jsonify({"message": "Ticket Kafka traité"}), 200
+    client = extract("client")
+    event = extract("event")
+    env = extract("environnement")
+    version = extract("version")
+    retention = extract("retention")
+    partitions = extract("partitions")
+
+    if not all([client, event, env, version, retention, partitions]):
+        return jsonify({"error": "Missing fields"}), 400
+
+    topic_name = f"{client}.{event}.{version}.{env}"
+    retention_ms = int(retention.replace("d", "")) * 24 * 60 * 60 * 1000
+    partitions = int(partitions)
+
+    response = create_topic(topic_name, partitions, retention_ms)
+
+    if response.status_code == 201:
+        return jsonify({"message": f"Topic {topic_name} created"}), 201
     else:
-        return jsonify({"message": "Pas un ticket Kafka"}), 200
+        return jsonify({
+            "error": "Failed to create topic",
+            "details": response.text
+        }), response.status_code
 
-if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+

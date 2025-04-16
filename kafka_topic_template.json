@@ -1,0 +1,9 @@
+{
+    "client": "banqueX",
+    "environnement": "production",
+    "event": "transaction",
+    "version": "v1",
+    "retention": "7d",
+    "partitions": 6
+  }
+  
